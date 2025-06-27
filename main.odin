@@ -17,7 +17,7 @@ Classification :: enum {
 	FREE,
 }
 
-INTERATIONS :: 100
+INTERATIONS :: 10
 
 main :: proc() {
 
@@ -194,6 +194,7 @@ main :: proc() {
 
 			//UPDATE LAYER 1 //////////
 
+			//NOTE: Do I also only update the weights for the chosen output stuff?
 			layer1_neuron_loss := make_slice([]f64, len(layer1_neurons))
 			defer delete(layer1_neuron_loss)
 			weights_to_update_t := transpose(layer1_weights) 
