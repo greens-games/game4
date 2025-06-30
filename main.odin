@@ -14,10 +14,10 @@ Classification :: enum {
 	SLEEP,
 	GATHER,
 	TRAIN,
-	FREE,
+	/* FREE, */
 }
 
-INTERATIONS :: 10
+INTERATIONS :: 100
 
 main :: proc() {
 
@@ -41,7 +41,7 @@ main :: proc() {
 
 	//Init layers
 	
-	layer1_weights := create_matrix(4,4)
+	layer1_weights := create_matrix(5,4)
 	defer {
 		for &row in layer1_weights {
 			delete(row)
@@ -54,7 +54,7 @@ main :: proc() {
 		}
 	}
 
-	output_layer_weights := create_matrix(len(Classification), 4)
+	output_layer_weights := create_matrix(len(Classification), 5)
 	defer {
 		for &row in output_layer_weights {
 			delete(row)
@@ -66,6 +66,7 @@ main :: proc() {
 			output_layer_weights[r][c] = rand.float64_range(0.,5.)
 		}
 	}
+
 
 	//Process input
 
@@ -93,7 +94,8 @@ main :: proc() {
 			break
 		}
 		for s, j in strings.split(line, ",") {
-			i := strconv.atof(s)
+			/* i := strconv.atof(s) */
+			i := rand.float64_range(0.,100.)
 			input_matrix[index][j] = i
 		}
 		index += 1
@@ -102,7 +104,8 @@ main :: proc() {
 	iter_expected := string(expected_file)
 	expected_vector := make_slice([]int, INTERATIONS)
 	index = 0
-	for line in strings.split_lines_iterator(&iter_expected) {
+
+	/* for line in strings.split_lines_iterator(&iter_expected) {
 		if len(line) == 0 {
 			continue
 		}
@@ -111,6 +114,11 @@ main :: proc() {
 		}
 		expected_vector[index] = strconv.atoi(line)
 		index += 1
+	} */
+	print_matrix(input_matrix)
+	for &entry, i in expected_vector {
+		index, max := find_max(input_matrix[i])
+		entry = index
 	}
 	
 	
@@ -155,16 +163,19 @@ main :: proc() {
 		fmt.println(o)
 		expected_o := expected_vector[index]
 		if chosen_output > -1 {
-			fmt.println(cast(Classification) chosen_output)
-			fmt.println(Classification(expected_vector[index]))
 			loss := cross_entropy_loss(o[expected_o])
 			accuracy := 1 - math.abs(cross_entropy_loss(o[chosen_output]))
 
 			fmt.println("STATS!!!")
+			fmt.println("CHOSEN: ",cast(Classification) chosen_output)
+			fmt.println("EXPTED: ",Classification(expected_vector[index]))
 			fmt.println("LOSS: ", loss)
 			fmt.println("ACCURACY: ", accuracy)
 
 			//Back Prop
+
+			//Update weights:
+			//new_weight := old_weight - alpha * (Z * delta) WHERE alpha is your learning rate; Z is the loss of the current neuron and delta is the loss of the previous linked neuron
 
 			//Find loss at each neuron weight * loss at output * partial derivative of activation function for that neuron
 			/////UPDATE OUTPUT LAYER ///////
@@ -209,8 +220,6 @@ main :: proc() {
 
 			for row, r in weights_to_update_t {
 				for &col, c in weights_to_update_t[r] {
-					//Update weights:
-					//new_weight := old_weight - alpha * (Z * delta) WHERE alpha is your learning rate; Z is the loss of the current neuron and delta is the loss of the previous linked neuron
 					new_weight := col - alpha * (layer1_neuron_loss[r] * loss)
 					col = new_weight
 				}
@@ -327,6 +336,18 @@ transpose :: proc(input_matrix: [][]f64) -> [][]f64 {
 		}
 	}
 	return input_matrix_t
+}
+
+find_max :: proc(vector: []f64) -> (int, f64) {
+	curr_i := -1
+	curr_max := -99999999.
+	for n, i in vector {
+		if n > curr_max {
+			curr_max = n
+			curr_i = i
+		}
+	}
+	return curr_i, curr_max
 }
 
 temp :: proc() {
