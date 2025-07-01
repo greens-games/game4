@@ -23,3 +23,12 @@
     - cols = number of neurons can be anything 
     - Odin is limited ot 4x4 builtin 
 
+
+### Testing
+- data sets found in data_set
+    - chars_data is data about fictional characters
+    - pokemon_data is data about pokemon 
+- The intention for these data sets is to test out the network and make sure it somewhat works on existing data sets
+- These data_sets will need to be cleaned up to accomplish some goal
+- Pokemon is already in csv format so that should be easy enough to start
+- Chars would require atleast exporting to csv
