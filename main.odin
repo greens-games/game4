@@ -17,7 +17,14 @@ Classification :: enum {
 	/* FREE, */
 }
 
-INTERATIONS :: 100
+State :: struct {
+	wealth: f64,
+	health: f64,
+	supplies: f64,
+	strength: f64,
+}
+
+INTERATIONS :: 1000000
 
 main :: proc() {
 
@@ -36,17 +43,11 @@ main :: proc() {
 		}
 	}
 
-
 	rand.reset(1)
-
 	//Init layers
-	
 	layer1_weights := create_matrix(5,4)
 	defer {
-		for &row in layer1_weights {
-			delete(row)
-		}
-		delete(layer1_weights)
+		clean_matrix(layer1_weights)
 	}
 	for r in 0..<len(layer1_weights) {
 		for c in 0..<len(layer1_weights[r]) {
@@ -56,10 +57,7 @@ main :: proc() {
 
 	output_layer_weights := create_matrix(len(Classification), 5)
 	defer {
-		for &row in output_layer_weights {
-			delete(row)
-		}
-		delete(output_layer_weights)
+		clean_matrix(output_layer_weights)
 	}
 	for r in 0..<len(output_layer_weights ) {
 		for c in 0..<len(output_layer_weights[r]) {
@@ -67,148 +65,60 @@ main :: proc() {
 		}
 	}
 
-
 	//Process input
 
-	input_file, ok := os.read_entire_file_from_filename("input.txt")
-	if !ok {
-		panic("FAILED TO READ INPUT FILE")
-	}
-
-	expected_file , ok_expected := os.read_entire_file_from_filename("expected.txt")
-	if !ok_expected {
-		panic("FAILED TO READ EXPECTED FILE")
-	}
-
-	iter := string(input_file)
 	input_matrix := make_slice([][]f64, INTERATIONS)
 	for &row in input_matrix {
 		row = make_slice([]f64, 4)
 	}
+	defer {
+		clean_matrix(input_matrix)
+	}
 	index := 0
-	for line in strings.split_lines_iterator(&iter) {
-		if len(line) == 0 || line[0] == 'W' {
-			continue
-		}
-		if index >= INTERATIONS {
-			break
-		}
-		for s, j in strings.split(line, ",") {
-			/* i := strconv.atof(s) */
-			i := rand.float64_range(0.,100.)
-			input_matrix[index][j] = i
+	for i in 0..<INTERATIONS {
+		for j in 0..<4 {
+			val := rand.float64_range(0.,100.)
+			input_matrix[i][j] = val
 		}
 		index += 1
 	}
 
-	iter_expected := string(expected_file)
 	expected_vector := make_slice([]int, INTERATIONS)
 	index = 0
-
-	/* for line in strings.split_lines_iterator(&iter_expected) {
-		if len(line) == 0 {
-			continue
-		}
-		if index >= INTERATIONS {
-			break
-		}
-		expected_vector[index] = strconv.atoi(line)
-		index += 1
-	} */
-	print_matrix(input_matrix)
 	for &entry, i in expected_vector {
 		index, max := find_max(input_matrix[i])
 		entry = index
 	}
 	
-	
-	//find max and min
-	bias:f64 = rand.float64_range(0.,10.)
-
-	
 	//Calculate layers
 
 	for &input, index in input_matrix {
 		input = normalize_vector(input)
-		layer1_neurons := dot(input, layer1_weights)
-		defer delete(layer1_neurons)
-		for &n in layer1_neurons {
-			n += bias
-			n = relu(n)
-		}
-		layer1_neurons = normalize_vector(layer1_neurons[:])
-
-		output_layer := dot(layer1_neurons, output_layer_weights)
-		defer delete(output_layer )
-		for &n in output_layer {
-			n += bias
-		}
-		output_layer = normalize_vector(output_layer[:])
-		o := soft_max(output_layer[:])
-
-		//Make decision
-		sum:f64 = 0.
-		chosen_output := -1
-		curr_max := -1.
-		for v, i in o {
-			if v > curr_max {
-				curr_max = v
-				chosen_output = i
-			}
-			sum += v
-		}
-
-		//Calc loss
-		fmt.println("OUTPUT VALUES:")
-		fmt.println(o)
-		expected_o := expected_vector[index]
+		chosen_output, o, layer1_neurons := foward_prop(input, layer1_weights, output_layer_weights)
 		if chosen_output > -1 {
+
+			//Calc loss
+			expected_o := expected_vector[index]
+
 			loss := cross_entropy_loss(o[expected_o])
 			accuracy := 1 - math.abs(cross_entropy_loss(o[chosen_output]))
 
-			fmt.println("STATS!!!")
-			fmt.println("CHOSEN: ",cast(Classification) chosen_output)
-			fmt.println("EXPTED: ",Classification(expected_vector[index]))
-			fmt.println("LOSS: ", loss)
-			fmt.println("ACCURACY: ", accuracy)
-
 			//Back Prop
 
-			//Update weights:
-			//new_weight := old_weight - alpha * (Z * delta) WHERE alpha is your learning rate; Z is the loss of the current neuron and delta is the loss of the previous linked neuron
-
-			//Find loss at each neuron weight * loss at output * partial derivative of activation function for that neuron
-			/////UPDATE OUTPUT LAYER ///////
-
-			//NOTE: This might be completely wrong and we onl;y care about out chosen output
-			/* output_loss := make_slice([]f64, len(o))
-			defer delete(output_loss)
-			output_weights_to_update_t := transpose(output_layer_weights) 
-			for row, r in output_weights_to_update_t {
-				for col, c in output_weights_to_update_t[r] {
-					weight := output_weights_to_update_t[r][c]
-					d_a := cross_entropy_loss(output_layer[c])
-					neuron_loss := weight * loss * d_a
-					output_loss[c] = neuron_loss
-				}
-			} */
-
-
-			fmt.println(output_layer_weights[chosen_output])
 			alpha := 0.1
-			/* output_layer_weights_t := transpose(output_layer_weights)  */
+			//UPDATE OUTPUT LAYER////////
 			for &row, r in output_layer_weights[chosen_output] {
 				new_weight := row - alpha * ( loss)
 				row = new_weight
 			}
-			/* output_layer_weights = transpose(output_layer_weights_t) */
 
 			//UPDATE LAYER 1 //////////
-
-			//NOTE: Do I also only update the weights for the chosen output stuff?
 			layer1_neuron_loss := make_slice([]f64, len(layer1_neurons))
 			defer delete(layer1_neuron_loss)
 			weights_to_update_t := transpose(layer1_weights) 
+			defer {
+				clean_matrix(weights_to_update_t)
+			}
 			for row, r in weights_to_update_t {
 				for col, c in weights_to_update_t[r] {
 					weight := weights_to_update_t[r][c]
@@ -225,10 +135,75 @@ main :: proc() {
 				}
 			}
 			new_weights_to_update := transpose(weights_to_update_t)
-			fmt.println()
+			defer {
+				clean_matrix(new_weights_to_update)
+			}
+			if index == INTERATIONS -1  { 
+				fmt.println("\t======ITERATION: ", index)
+				fmt.println("STATS!!!")
+				fmt.println("CHOSEN: ",cast(Classification) chosen_output)
+				fmt.println("EXPTED: ",Classification(expected_vector[index]))
+				fmt.println("LOSS: ", loss)
+				fmt.println("ACCURACY: ", accuracy * 100)
+			}
 		}
-		fmt.println("\t======ITERATION: ", index)
 	}
+	
+	running := true
+	input_buff: [1024]byte
+	data: [4]f64
+	for running {
+		
+		fmt.print("WEALTH:")
+		os.read(os.stdin, input_buff[:])
+		data[0] = strconv.atof(string(input_buff[:3]))
+		fmt.print("HEALTH:")
+		os.read(os.stdin, input_buff[:])
+		data[1] = strconv.atof(string(input_buff[:3]))
+
+		fmt.print("SUPPLIES:")
+		os.read(os.stdin, input_buff[:])
+		data[2] = strconv.atof(string(input_buff[:3]))
+
+		fmt.print("STENGTH:")
+		os.read(os.stdin, input_buff[:])
+		data[3] = strconv.atof(string(input_buff[:3]))
+
+		o, a, b := foward_prop(data[:], layer1_weights, output_layer_weights)
+		fmt.println(Classification(o))
+	}
+}
+
+foward_prop :: proc(input: []f64, layer1_weights, output_layer_weights: [][]f64) -> (int, [4]f64, []f64) {
+	layer1_neurons := dot(input, layer1_weights)
+	defer delete(layer1_neurons)
+	for &n in layer1_neurons {
+		/* n += bias */
+		n = relu(n)
+	}
+	layer1_neurons = normalize_vector(layer1_neurons[:])
+
+	output_layer := dot(layer1_neurons, output_layer_weights)
+	defer delete(output_layer)
+	for &n in output_layer {
+		/* n += bias */
+	}
+	output_layer = normalize_vector(output_layer[:])
+	o := soft_max(output_layer[:])
+
+	//Make decision
+	sum:f64 = 0.
+	chosen_output := -1
+	curr_max := -1.
+	for v, i in o {
+		if v > curr_max {
+			curr_max = v
+			chosen_output = i
+		}
+		sum += v
+	}
+
+	return chosen_output, o, layer1_neurons
 }
 
 back_prop :: proc(weights_to_update: [][]f64, neurons: []f64, loss: f64) {
@@ -360,4 +335,11 @@ print_matrix :: proc(m: [][]f64) {
 	for row in m{
 		fmt.printfln("%v", row)
 	}
+}
+
+clean_matrix :: proc(m: [][]f64) {
+		for &row in m {
+			delete(row)
+		}
+		delete(m)
 }
