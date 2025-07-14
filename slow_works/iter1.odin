@@ -32,7 +32,7 @@ Layer :: struct {
 Matrix :: distinct [][]f64
 
 //MODEL PARAMS
-ITERATIONS :: 100000
+ITERATIONS :: 1000000
 NUM_LAYERS :: 2
 
 run :: proc() {
@@ -53,9 +53,32 @@ run :: proc() {
 	}
 
 	rand.reset(1)
+
+	//Process input
+	input_matrix := make_slice(Matrix, ITERATIONS)
+	for &row in input_matrix {
+		row = make_slice([]f64, 4)
+	}
+	defer {
+		clean_matrix(input_matrix)
+	}
+	expected_vector := make_slice([]int, ITERATIONS)
+	index := 0
+	for i in 0..<ITERATIONS {
+		for j in 0..<4 {
+			val := rand.float64_range(0.,100.)
+			input_matrix[i][j] = val
+		}
+
+		index, max := find_min(input_matrix[i])
+		expected_vector[i] = index
+		index += 1
+	}
+	/* fmt.println(input_matrix) */
+
 	//Init layers
 	layer1: Layer
-	layer1.weights = create_matrix(5,4)
+	layer1.weights = create_matrix(16,4)
 	defer {
 		clean_matrix(layer1.weights)
 	}
@@ -64,9 +87,10 @@ run :: proc() {
 			layer1.weights[r][c] = rand.float64_range(0.,5.)
 		}
 	}
+	/* fmt.println(layer1.weights) */
 
 	output_layer: Layer
-	output_layer.weights = create_matrix(len(Classification), 5)
+	output_layer.weights = create_matrix(len(Classification), 16)
 	defer {
 		clean_matrix(output_layer.weights)
 	}
@@ -80,30 +104,6 @@ run :: proc() {
 	layers[0] = layer1
 	layers[1] = output_layer
 
-	//Process input
-
-	input_matrix := make_slice(Matrix, ITERATIONS)
-	for &row in input_matrix {
-		row = make_slice([]f64, 4)
-	}
-	defer {
-		clean_matrix(input_matrix)
-	}
-	index := 0
-	for i in 0..<ITERATIONS {
-		for j in 0..<4 {
-			val := rand.float64_range(0.,100.)
-			input_matrix[i][j] = val
-		}
-		index += 1
-	}
-
-	expected_vector := make_slice([]int, ITERATIONS)
-	index = 0
-	for &entry, i in expected_vector {
-		index, max := find_min(input_matrix[i])
-		entry = index
-	}
 	
 	//Calculate layers
 
@@ -112,7 +112,8 @@ run :: proc() {
 	for &input, index in input_matrix {
 		input = normalize_vector(input)
 		chosen_output, o, layer1_neurons := foward_prop(input, layers)
-		if chosen_output > -1 {
+		/* fmt.println(o) */
+		/* if chosen_output > -1 {
 			expected_o := expected_vector[index]
 			loss, accuracy := back_prop(expected_o, o[:], chosen_output, layers, layer1_neurons)
 			if index == ITERATIONS -1  { 
@@ -123,7 +124,7 @@ run :: proc() {
 				fmt.println("LOSS: ", loss)
 				fmt.println("ACCURACY: ", accuracy * 100)
 			}
-		}
+		} */
 	}
 	time.stopwatch_stop(&timer)
 	fmt.println(timer._accumulation)
