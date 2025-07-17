@@ -112,23 +112,23 @@ run :: proc() {
 	for &input, index in input_matrix {
 		input = normalize_vector(input)
 		chosen_output, o, layer1_neurons := foward_prop(input, layers)
-		/* fmt.println(o) */
-		/* if chosen_output > -1 {
+		/* fmt.println("O: ", o) */
+		if chosen_output > -1 {
 			expected_o := expected_vector[index]
 			loss, accuracy := back_prop(expected_o, o[:], chosen_output, layers, layer1_neurons)
 			if index == ITERATIONS -1  { 
-				fmt.println("\t======ITERATION: ", index)
+				/* fmt.println("\t======ITERATION: ", index)
 				fmt.println("STATS!!!")
 				fmt.println("CHOSEN: ",cast(Classification) chosen_output)
 				fmt.println("EXPTED: ",Classification(expected_vector[index]))
 				fmt.println("LOSS: ", loss)
-				fmt.println("ACCURACY: ", accuracy * 100)
+				fmt.println("ACCURACY: ", accuracy * 100) */
 			}
-		} */
+		}
 	}
 	time.stopwatch_stop(&timer)
 	fmt.println(timer._accumulation)
-	/* 
+	
 	running := true
 	input_buff: [1024]byte
 	data: [4]f64
@@ -152,7 +152,7 @@ run :: proc() {
 		o, a, b := foward_prop(data[:], layers)
 		fmt.println(Classification(o))
 		//TODO: Add some runtime training this means we need to figure out the expted value for a given state
-	} */
+	}
 }
 
 foward_prop :: proc(input: []f64, layers: [NUM_LAYERS]Layer) -> (int, [4]f64, []f64) {
@@ -190,7 +190,7 @@ foward_prop :: proc(input: []f64, layers: [NUM_LAYERS]Layer) -> (int, [4]f64, []
 back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [NUM_LAYERS]Layer, layer1_neurons: []f64) -> (loss: f64, accuracy: f64){
 	//Calc loss
 
-	loss = cross_entropy_loss(o[expected_o])
+	loss = cross_entropy_loss(o[chosen_output])
 	accuracy = 1 - math.abs(cross_entropy_loss(o[chosen_output]))
 
 	//Back Prop

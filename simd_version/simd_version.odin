@@ -7,6 +7,8 @@ import "core:math"
 import "base:intrinsics"
 import "core:time"
 import "core:mem"
+import "core:os"
+import "core:strconv"
 
 simd_16 :: #simd[16]f64
 simd_8 :: #simd[8]f64
@@ -41,6 +43,7 @@ Output_Layer :: struct {
 ITERATIONS :: 1000000
 MAX_INPUT_VALUE :: 100.
 MAX_WEIGHT_VALUE :: 5.
+ALPHA :: 0.1
 
 run :: proc() {
 	when ODIN_DEBUG {
@@ -81,6 +84,8 @@ run :: proc() {
 
 	index = 0
 
+	/* hidden_layer1, out_layer := test_layers() */
+
 	hidden_layer1: Hidden_Layer
 	hidden_layer1.w1 = random_matrix4x4()
 	hidden_layer1.w2 = random_matrix4x4()
@@ -91,83 +96,119 @@ run :: proc() {
 	for &weights in out_layer.w1 {
 		weights = random_simd16()
 	}
-	alpha := 0.1
 
 	timer: time.Stopwatch
 	time.stopwatch_start(&timer)
+	ret:[len(Classification)]f64
 	for input, index in input_matrix {
 
-		hidden_layer1 := hidden_layer1
-		out_layer := out_layer  
-		v := transmute(matrix[1,4]f64)input
-
-		hidden_layer1.neurons = transmute(simd_16) [4]matrix[1,4]f64{
-			v * hidden_layer1.w1,
-			v * hidden_layer1.w2,
-			v * hidden_layer1.w3,
-			v * hidden_layer1.w4,
-		}
-		hidden_layer1.neurons = relu_16(hidden_layer1.neurons) 
-		hidden_layer1.neurons = normalize_simd(hidden_layer1.neurons)
-
-		//TODO: This will need to be cleaned up a bit but should in theory be ok
-		out_layer_temp: [4]f64
-		for weights, i in out_layer.w1 {
-			out_layer_temp[i] = dot_simd16(weights, hidden_layer1.neurons)
-		}
-		out_layer.neurons = {out_layer_temp[0], out_layer_temp[1], out_layer_temp[2], out_layer_temp[3]}
-		out_layer.neurons = normalize_simd(out_layer.neurons)
-
-		//Soft max
-		a := simd.to_array(out_layer.neurons)
-		ret: [len(Classification)]f64
-		exp_sum:f64 = 0.
-		for val in a {
-			exp_sum += math.exp(val)
-		}
-		for val, index in a {
-			ret[index] = math.exp(val)/exp_sum
-		}
+		ret = forward_prop(input, &hidden_layer1, &out_layer)
 		
 		//TODO: Back prop
 		
+		back_prop(ret, &hidden_layer1, &out_layer, expected_vector, index)
 		//Cross entropy loss
-		expected := ret[int(expected_vector[index])]
-		loss := -(math.log10(expected))
-		update_val := generate_simd16(alpha * loss)
-		
-		for &weights in out_layer.w1 {
-			weights = simd.sub(weights, update_val)
-		}
-		
-
-		vals:simd_16 = auto_cast d_relu_simd16(hidden_layer1.neurons)
-		comb_loss := alpha * loss
-		vals = simd.mul(vals, generate_simd16(comb_loss))
-
-		staging1 := transmute(simd_16)hidden_layer1.w1
-		staging1 = simd.sub(staging1, vals)
-		hidden_layer1.w1 = transmute(matrix[4,4]f64)staging1
-
-		staging2 := transmute(simd_16)hidden_layer1.w2
-		staging2 = simd.sub(staging2, vals)
-		hidden_layer1.w2 = transmute(matrix[4,4]f64)staging2
-
-		staging3 := transmute(simd_16)hidden_layer1.w3
-		staging3 = simd.sub(staging3, vals)
-		hidden_layer1.w3 = transmute(matrix[4,4]f64)staging3
-
-		staging4 := transmute(simd_16)hidden_layer1.w4
-		staging4 = simd.sub(staging4, vals)
-		hidden_layer1.w4 = transmute(matrix[4,4]f64)staging4
 
 	}
 	time.stopwatch_stop(&timer)
 	fmt.println(timer._accumulation)
-	fmt.println("DONE")
+	fmt.println("DONE TRAINING")
+
+	running := true
+	input_buff: [1024]byte
+	data: [4]f64
+	for running {
+		
+		fmt.print("WEALTH:")
+		os.read(os.stdin, input_buff[:])
+		data[0] = strconv.atof(string(input_buff[:3]))
+		fmt.print("HEALTH:")
+		os.read(os.stdin, input_buff[:])
+		data[1] = strconv.atof(string(input_buff[:3]))
+
+		fmt.print("SUPPLIES:")
+		os.read(os.stdin, input_buff[:])
+		data[2] = strconv.atof(string(input_buff[:3]))
+
+		fmt.print("STENGTH:")
+		os.read(os.stdin, input_buff[:])
+		data[3] = strconv.atof(string(input_buff[:3]))
+
+		simd_data := simd.from_array(data) 
+		o := forward_prop(simd_data, &hidden_layer1, &out_layer)
+		i, max := find_max(o)
+		fmt.println(Classification(i))
+		//TODO: Add some runtime training this means we need to figure out the expted value for a given state
+	} 
 }
 
-forward_prop :: proc(input: simd_4, hidden_layer1: Hidden_Layer, out_layer: Output_Layer) {
+forward_prop :: proc(input: simd_4, hidden_layer1: ^Hidden_Layer, out_layer: ^Output_Layer) -> [len(Classification)]f64 {
+	v := transmute(matrix[1,4]f64)input
+
+	hidden_layer1.neurons = transmute(simd_16) [4]matrix[1,4]f64{
+		v * hidden_layer1.w1,
+		v * hidden_layer1.w2,
+		v * hidden_layer1.w3,
+		v * hidden_layer1.w4,
+	}
+	hidden_layer1.neurons = normalize_vector(hidden_layer1.neurons)
+	hidden_layer1.neurons = relu_16(hidden_layer1.neurons) 
+
+	//TODO: This will need to be cleaned up a bit but should in theory be ok
+	out_layer_temp: [4]f64
+	for weights, i in out_layer.w1 {
+		out_layer_temp[i] = dot_simd16(weights, hidden_layer1.neurons)
+	}
+	out_layer.neurons = {out_layer_temp[0], out_layer_temp[1], out_layer_temp[2], out_layer_temp[3]}
+	out_layer.neurons = normalize_vector(out_layer.neurons)
+
+	//Soft max
+	ret := soft_max(simd.to_array(out_layer.neurons))
+	return ret
+}
+
+back_prop :: proc(ret: [len(Classification)]f64, hidden_layer1: ^Hidden_Layer, out_layer: ^Output_Layer, expected_vector: []Classification, index: int) {
+	expected := ret[int(expected_vector[index])]
+	loss := -(math.log10(expected))
+	update_val := generate_simd16(ALPHA * loss)
+
+	for &weights in out_layer.w1 {
+		weights = simd.sub(weights, update_val)
+	}
+
+
+	vals:simd_16 = auto_cast d_relu_simd16(hidden_layer1.neurons)
+	comb_loss := ALPHA * loss
+	vals = simd.mul(vals, generate_simd16(comb_loss))
+	vals = normalize_vector(vals)
+
+	staging1 := transmute(simd_16)hidden_layer1.w1
+	staging1 = simd.sub(staging1, vals)
+	hidden_layer1.w1 = transmute(matrix[4,4]f64)staging1
+
+	staging2 := transmute(simd_16)hidden_layer1.w2
+	staging2 = simd.sub(staging2, vals)
+	hidden_layer1.w2 = transmute(matrix[4,4]f64)staging2
+
+	staging3 := transmute(simd_16)hidden_layer1.w3
+	staging3 = simd.sub(staging3, vals)
+	hidden_layer1.w3 = transmute(matrix[4,4]f64)staging3
+
+	staging4 := transmute(simd_16)hidden_layer1.w4
+	staging4 = simd.sub(staging4, vals)
+	hidden_layer1.w4 = transmute(matrix[4,4]f64)staging4
+}
+
+soft_max :: proc(neurons: [len(Classification)]f64) -> [len(Classification)]f64 {
+		ret: [len(Classification)]f64
+		exp_sum:f64 = 0.
+		for val in neurons {
+			exp_sum += math.exp(val)
+		}
+		for val, index in neurons {
+			ret[index] = math.exp(val)/exp_sum
+		}
+	return ret
 }
 
 dot_simd16 :: proc(v1: simd_16, v2: simd_16) -> f64 {
@@ -194,6 +235,18 @@ find_min :: proc(vector: [4]f64) -> (int, f64) {
 		}
 	}
 	return curr_i, curr_min
+}
+
+find_max :: proc(vector: [4]f64) -> (int, f64) {
+	curr_i := -1
+	curr_max := -99999999.
+	for n, i in vector {
+		if n > curr_max {
+			curr_max = n
+			curr_i = i
+		}
+	}
+	return curr_i, curr_max
 }
 
 random_matrix4x4 :: proc() -> matrix[4,4]f64 {
@@ -252,8 +305,8 @@ normalize_simd :: proc(v: $T) -> T {
 	return _v
 }
 
-normalize_vector :: proc(vector: []f64) -> []f64 {
-	vector := vector
+normalize_vector :: proc(v: $T) -> T {
+	vector := simd.to_array(v)
 	min := 99999.
 	max := -99999.
 	for val in vector {
@@ -272,5 +325,24 @@ normalize_vector :: proc(vector: []f64) -> []f64 {
 		range := 1. - -1.
 		val = (numerator/denom) * range + 1
 	}
-	return vector
+	return simd.from_array(vector)
+}
+
+test_layers :: proc() -> (h_layer:Hidden_Layer, o_layer:Output_Layer) {
+
+
+	h_layer.w1 = {-5.8565632650155068, -3.839782176429364, -1.9285955027797339, -3.5914623853645207, -1.1026883696258656, -3.498582399892622, -5.1930026589907108, -3.2482181030027655, -3.787649113347765, -3.9276615790684239, -5.498037256129967, -2.222753162113039, -3.6291536526131769, -2.5965786057963287, -5.8887698870855889, -1.1299246759544488}
+
+	h_layer.w2 = {-2.4943036689915603, -3.667012675266214, -4.9799568461732537, -3.456556116593007, -2.5999483489585287, -4.0296499426013108, -3.1717312042922465, -4.4051875568073946, -2.973924219229199, -4.4332595327943976, -2.9968994867069139, -1.9581711713042713, -1.5716474475957254, -1.738294223340116, -2.8608819571265589, -3.4631042399271386}
+
+	h_layer.w3 = {-5.956797996399081, -2.5291879259794916, -1.6056287067631603, -1.7442519296766754, -2.489154849421629, -2.350851005529792, -3.3519942207594475, -2.19616103178465, -5.3347565783825388, -1.5299008385484276, -3.915657725512842, -1.1779950344506922, -1.391551718844866, -2.940983227861703, -5.8916561485712506, -1.3977123282301696}
+
+	h_layer.w4 = {-5.018456793359396, -3.4046069691836336, -1.6275292238306438, -5.402894362727134, -4.349700626244086, -2.0758871960101972, -5.118020098892444, -3.3349149754117753, -2.062355153566237, -1.117519623610308, -3.568757177583261, -4.60896882152438, -4.1305870876245239, -4.2005957528345395, -4.5480299086441285, -1.1897587327954202}
+
+	o_layer = Output_Layer{
+		w1 = {
+			{4.507554829172683, 1.1854348611560506, 2.260804232892744, 4.5181871458235205, 1.4388439222010589, 0.37092651465489446, 2.8991956638983987, 4.4054929735526605, 4.313165532610239, 1.8801567734739588, 1.6376041642025667, 3.602636274215268, 4.35738374301488, 4.217137237823003, 0.07231215955381498, 0.35114279474454879}, {2.4341987959971796, 1.2060526891968664, 3.8236684238862808, 1.2619577676897868, 3.1041764884637595, 4.5424318230547618, 3.7365052146342714, 0.04742326446625522, 1.0817555840887303, 1.769427174910773, 4.7339440215406965, 0.07547911233856219, 2.8468694859274235, 3.7663867922630456, 3.85949744776881, 3.1858860412363392}, {3.7646925887651719, 0.5266002785552801, 1.7580830579211282, 3.3966488904863379, 0.037217000031373626, 3.5565620206445914, 0.5930114769610859, 3.275790619715443, 2.1906996061192276, 3.725761254027318, 3.3908823541226498, 3.4020550666501959, 0.96044132950758176, 4.3128668824536458, 4.5319769447391138, 4.674700036659721}, {3.147122641490687, 1.990979610981056, 0.69675322202380308, 2.9799229629045083, 2.2459856196870613, 3.7049264789024527, 4.240409333513722, 1.7369213164585033, 2.2690808056355305, 1.8149709760083386, 1.8991176031105959, -0.03556580053752878, 4.0184340087232489, 0.9552120744713732, 3.2105858888605003, 2.528274610093832}
+		}
+	}
+	return
 }
