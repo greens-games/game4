@@ -18,8 +18,9 @@
 - Raylib
 
 ### TODO:
-- The network does not seem to actually work or train or anything really
-- Need to figure out how to fix that
+- Try with only using matrices for now
+- Implement a sigmoid variant
+
 
 ### Most likely issues
 - How to calculate loss without base training data/ expected results
