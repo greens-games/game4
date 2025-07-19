@@ -4,6 +4,7 @@ import "core:terminal"
 import "core:fmt" 
 import "core:simd"
 import "core:math/rand"
+import "core:math/linalg"
 import "core:math"
 import "base:intrinsics"
 import "core:time"
@@ -35,6 +36,24 @@ MAX_INPUT_VALUE :: 100.
 MAX_WEIGHT_VALUE :: 5.
 
 main :: proc() {
+
+	a := matrix[4,4]f64 {
+	2,2,2,2,
+	2,2,2,2,
+	2,2,2,2,
+	2,2,2,2,
+	}
+
+	b := matrix[4,4]f64 {
+	3,3,3,3,
+	3,3,3,3,
+	3,3,3,3,
+	3,3,3,3,
+	}
+
+	fmt.println( b * a)
+	/* fmt.println(linalg.matrix_mul(a,b)) */
+	fmt.println(linalg.matrix_comp_mul(a, b))
 
 }
 
