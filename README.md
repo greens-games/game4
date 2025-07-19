@@ -19,6 +19,7 @@
 
 ### TODO:
 - Try with only using matrices for now
+    - We can get away with a Deep Network (more layers rather than more neurons) thus using just 4x4 matrices should be fine for now
 - Implement a sigmoid variant
 
 
