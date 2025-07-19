@@ -33,6 +33,7 @@ Hidden_Layer :: struct {
 	/* w2: matrix[4, 4]f64,
 	w3: matrix[4, 4]f64,
 	w4: matrix[4, 4]f64, */
+	weighted_sums: simd_4,
 	neurons: simd_4,
 }
 
@@ -41,7 +42,7 @@ Output_Layer :: struct {
 	neurons: simd_4,
 }
 
-ITERATIONS :: 10
+ITERATIONS :: 100
 MAX_INPUT_VALUE :: 100.
 MAX_WEIGHT_VALUE :: 2.
 NUM_LAYERS :: 1
@@ -116,7 +117,7 @@ run :: proc() {
 		
 		//TODO: Back prop
 		
-		back_prop(ret, hidden_layers, &out_layer, expected_vector, index)
+		back_prop(input, ret, hidden_layers, &out_layer, expected_vector, index)
 		//Cross entropy loss
 
 		fmt.println()
@@ -158,14 +159,14 @@ forward_prop :: proc(input: simd_4, hidden_layers: [NUM_LAYERS]^Hidden_Layer, ou
 	_input = normalize_vector(_input)
 	v := transmute(matrix[1,4]f64)_input
 
-	hidden_layers[0].neurons = transmute(simd_4) [1]matrix[1,4]f64{
+	hidden_layers[0].weighted_sums = transmute(simd_4) [1]matrix[1,4]f64{
 		v * hidden_layers[0].w1,
 		/* v * hidden_layers[0].w2,
 		v * hidden_layers[0].w3,
 		v * hidden_layers[0].w4, */
 	}
 	
-	hidden_layers[0].neurons = normalize_vector(hidden_layers[0].neurons)
+	hidden_layers[0].neurons = normalize_vector(hidden_layers[0].weighted_sums)
 	hidden_layers[0].neurons = relu(hidden_layers[0].neurons) 
 
 	//TODO: This will need to be cleaned up a bit but should in theory be ok
@@ -181,31 +182,60 @@ forward_prop :: proc(input: simd_4, hidden_layers: [NUM_LAYERS]^Hidden_Layer, ou
 	return ret
 }
 
-back_prop :: proc(ret: [len(Classification)]f64, hidden_layers: [NUM_LAYERS]^Hidden_Layer, out_layer: ^Output_Layer, expected_vector: []Classification, index: int) {
-	expected := ret[int(expected_vector[index])]
-	predicted, max := find_max(ret)
-	loss := -(math.log10(expected))
-	update_val := generate_simd4(ALPHA * loss)
+back_prop :: proc(input: simd_4, ret: [len(Classification)]f64, hidden_layers: [NUM_LAYERS]^Hidden_Layer, out_layer: ^Output_Layer, expected_vector: []Classification, index: int) {
+	one_hot := [len(Classification)]f64{}
+	//NOTE: Might still be able to use log(ret[int(expected_vector[index](]) instead of just 1 and everything else is 0
+	one_hot[int(expected_vector[index])] = 1.
+	out_loss_v:simd_4 = simd.from_array(ret - one_hot)
+	temp_out_loss_v := simd.mul(out_loss_v, hidden_layers[0].neurons)
+	d_out_layer_weights := 1/(ITERATIONS * (simd.reduce_add_bisect(temp_out_loss_v)))
 
-	for &weights in out_layer.w1 {
-		weights = simd.sub(weights, update_val)
+	temp_out_layer_w1 := transmute(matrix[4, 4]f64) out_layer.w1
+	temp_d_out_layer_weighted_sums :=  temp_out_layer_w1 * (transmute(matrix[4,1]f64)out_loss_v)
+	temp_d_relu := d_relu(hidden_layers[0].neurons)
+	d_out_layer_weighted_sums := simd.mul(transmute(simd_4)temp_d_out_layer_weighted_sums, temp_d_relu)
+
+	d_hidden_layer_weights := 1 / (ITERATIONS * simd.mul(input, d_out_layer_weighted_sums))
+
+	staging1 := transmute(matrix[4,4]f64) [4]simd_4 {
+		ALPHA * d_hidden_layer_weights,
+		ALPHA * d_hidden_layer_weights,
+		ALPHA * d_hidden_layer_weights,
+		ALPHA * d_hidden_layer_weights
 	}
+	hidden_layers[0].w1 = hidden_layers[0].w1 - staging1
+	staging1 = transmute(matrix[4,4]f64) [4]simd_4 {
+		ALPHA * d_out_layer_weights,
+		ALPHA * d_out_layer_weights,
+		ALPHA * d_out_layer_weights,
+		ALPHA * d_out_layer_weights
+	}
+	out_layer.w1 = transmute([4]simd_4)(transmute(matrix[4,4]f64)out_layer.w1 - staging1)
+
+	//TODO: Bias stuff
+
+	/* loss := -(math.log10(expected)) */
+	/* update_val := generate_simd4(ALPHA * loss) */
+
+	/* for &weights in out_layer.w1 {
+		weights = simd.sub(weights, update_val)
+	} */
 
 
-	vals:simd_4 = d_relu(hidden_layers[0].neurons)
+	/* vals:simd_4 = d_relu(hidden_layers[0].neurons)
 	comb_loss := ALPHA * loss
-	vals = simd.mul(vals, generate_simd4(comb_loss))
+	vals = simd.mul(vals, generate_simd4(comb_loss)) */
 	/* vals = normalize_vector(vals) */
 
 	/* staging1 := transmute(simd_16)hidden_layers[0].w1
 	staging1 = simd.sub(staging1, vals) */
-	vals_m := transmute(matrix[4, 4]f64) [4]simd_4{
+	/* vals_m := transmute(matrix[4, 4]f64) [4]simd_4{
 	vals,
 	vals,
 	vals,
 	vals
 	}
-	hidden_layers[0].w1 = hidden_layers[0].w1 - vals_m
+	hidden_layers[0].w1 = hidden_layers[0].w1 - vals_m */
 }
 
 soft_max :: proc(neurons: [len(Classification)]f64) -> [len(Classification)]f64 {
