@@ -11,8 +11,6 @@
 - #soa or aos
     - not sure yet haven't tried
 
-#### NOTE: see playground for tests
-
 ### Idea
 - Simple Neural network implementation
 - Generational learning?
@@ -20,7 +18,8 @@
 - Raylib
 
 ### TODO:
-- Make non-classification decisions (like how predicting house prices would be)
+- The network does not seem to actually work or train or anything really
+- Need to figure out how to fix that
 
 ### Most likely issues
 - How to calculate loss without base training data/ expected results
