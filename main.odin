@@ -9,7 +9,7 @@ Version :: enum {
 }
 
 main :: proc() {
-	version:Version = .SIMD
+	version:Version = .SLOW
 	switch version {
 	case .SIMD:
 		simd_version.run()

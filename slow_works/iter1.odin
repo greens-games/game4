@@ -32,8 +32,9 @@ Layer :: struct {
 Matrix :: distinct [][]f64
 
 //MODEL PARAMS
-ITERATIONS :: 1000000
+ITERATIONS :: 10
 NUM_LAYERS :: 2
+H_LAYER_NEURONS :: 4
 
 run :: proc() {
 
@@ -78,7 +79,7 @@ run :: proc() {
 
 	//Init layers
 	layer1: Layer
-	layer1.weights = create_matrix(16,4)
+	layer1.weights = create_matrix(H_LAYER_NEURONS,4)
 	defer {
 		clean_matrix(layer1.weights)
 	}
@@ -90,7 +91,7 @@ run :: proc() {
 	/* fmt.println(layer1.weights) */
 
 	output_layer: Layer
-	output_layer.weights = create_matrix(len(Classification), 16)
+	output_layer.weights = create_matrix(len(Classification), H_LAYER_NEURONS)
 	defer {
 		clean_matrix(output_layer.weights)
 	}
@@ -116,6 +117,7 @@ run :: proc() {
 		if chosen_output > -1 {
 			expected_o := expected_vector[index]
 			loss, accuracy := back_prop(expected_o, o[:], chosen_output, layers, layer1_neurons)
+			fmt.println(o)
 			if index == ITERATIONS -1  { 
 				/* fmt.println("\t======ITERATION: ", index)
 				fmt.println("STATS!!!")

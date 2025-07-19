@@ -35,12 +35,7 @@ MAX_INPUT_VALUE :: 100.
 MAX_WEIGHT_VALUE :: 5.
 
 main :: proc() {
-	a := simd_4{0.4,0.3,3.1,4.2}
-	b := simd_4{2.003338574598326e+18, 2.003338574598326e+18, 2.003338574598326e+18, 2.003338574598326e+18}
 
-	b = normalize_vector(b)
-	v := simd_4{2.0, .003, 1.5, 0.33}
-	fmt.println(simd.sub(a, b))
 }
 
 normalize_vector :: proc(v: $T) -> T {
@@ -66,4 +61,10 @@ normalize_vector :: proc(v: $T) -> T {
 	}
 	fmt.println("VECTOR: ", vector)
 	return simd.from_array(vector)
+}
+
+generate_simd4 :: proc(val: $T) -> #simd[4]T{
+	return {
+	val, val, val, val,
+	}
 }
