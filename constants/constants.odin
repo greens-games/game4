@@ -1,0 +1,6 @@
+package constants
+
+H_NUM_NEURONS :: 4
+O_NUM_NEURONS :: 4
+ITERATIONS :: 1000
+NUM_LAYERS :: 1

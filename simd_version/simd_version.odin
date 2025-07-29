@@ -42,9 +42,9 @@ Output_Layer :: struct {
 	neurons: simd_4,
 }
 
-ITERATIONS :: 100
+ITERATIONS :: 1
 MAX_INPUT_VALUE :: 100.
-MAX_WEIGHT_VALUE :: 2.
+MAX_WEIGHT_VALUE :: 5.
 NUM_LAYERS :: 1
 ALPHA :: 0.1
 
@@ -85,23 +85,23 @@ run :: proc() {
 		index += 1
 	}
 
+	fmt.println("INPUT_MATRIX: ", input_matrix, "\n")
 	index = 0
 
 	/* hidden_layer1, out_layer := test_layers() */
 
 	hidden_layer1: Hidden_Layer
 	hidden_layer1.w1 = random_matrix4x4()
+	fmt.println("HIDDEN_LAYER1: ", hidden_layer1, "\n")
 	/* hidden_layer1.w2 = random_matrix4x4()
 	hidden_layer1.w3 = random_matrix4x4()
 	hidden_layer1.w4 = random_matrix4x4() */
-
-	hidden_layer2: Hidden_Layer
-	hidden_layer2.w1 = random_matrix4x4()
 
 	out_layer: Output_Layer
 	for &weights in out_layer.w1 {
 		weights = random_simd4()
 	}
+	fmt.println("OUT_LAYER: ", out_layer, "\n")
 
 	hidden_layers:[NUM_LAYERS]^Hidden_Layer = {&hidden_layer1}
 

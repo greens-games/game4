@@ -1,5 +1,7 @@
 package slow_works
 
+import "../constants"
+
 import "core:fmt"
 import "core:os"
 import "core:strings"
@@ -32,9 +34,56 @@ Layer :: struct {
 Matrix :: distinct [][]f64
 
 //MODEL PARAMS
-ITERATIONS :: 10
-NUM_LAYERS :: 2
-H_LAYER_NEURONS :: 4
+
+generate_input :: proc() -> (Matrix, []int) {
+	//Process input
+	input_matrix := make_slice(Matrix, constants.ITERATIONS)
+	for &row in input_matrix {
+		row = make_slice([]f64, 4)
+	}
+	//TODO: Memory leak
+	expected_vector := make_slice([]int, constants.ITERATIONS)
+	index := 0
+	for i in 0..<constants.ITERATIONS {
+		for j in 0..<4 {
+			val := rand.float64_range(0.,100.)
+			input_matrix[i][j] = val
+		}
+
+		index, max := find_min(input_matrix[i])
+		expected_vector[i] = index
+		index += 1
+	}
+
+	return input_matrix, expected_vector
+}
+
+init_network :: proc() -> [constants.NUM_LAYERS + 1]Layer {
+	//Init layers
+	layer1: Layer
+	layer1.weights = create_matrix(constants.H_NUM_NEURONS,4)
+	for r in 0..<len(layer1.weights) {
+		for c in 0..<len(layer1.weights[r]) {
+			layer1.weights[r][c] = rand.float64_range(-1.,1.)
+		}
+	}
+	fmt.println("LAYER1: ", layer1, "\n")
+	/* fmt.println(layer1.weights) */
+
+	output_layer: Layer
+	output_layer.weights = create_matrix(len(Classification), constants.H_NUM_NEURONS)
+	for r in 0..<len(output_layer.weights ) {
+		for c in 0..<len(output_layer.weights[r]) {
+			output_layer.weights[r][c] = rand.float64_range(-1.,1.)
+		}
+	}
+
+	fmt.println("OUTPUT_LAYER: ", output_layer, "\n")
+	layers: [constants.NUM_LAYERS + 1]Layer
+	layers[0] = layer1
+	layers[1] = output_layer
+	return layers
+}
 
 run :: proc() {
 
@@ -53,58 +102,20 @@ run :: proc() {
 		}
 	}
 
-	rand.reset(1)
 
-	//Process input
-	input_matrix := make_slice(Matrix, ITERATIONS)
-	for &row in input_matrix {
-		row = make_slice([]f64, 4)
-	}
+	/* fmt.println(input_matrix) */
+
+	input_matrix, expected_vector := generate_input() 
 	defer {
 		clean_matrix(input_matrix)
 	}
-	expected_vector := make_slice([]int, ITERATIONS)
-	index := 0
-	for i in 0..<ITERATIONS {
-		for j in 0..<4 {
-			val := rand.float64_range(0.,100.)
-			input_matrix[i][j] = val
-		}
 
-		index, max := find_min(input_matrix[i])
-		expected_vector[i] = index
-		index += 1
-	}
-	/* fmt.println(input_matrix) */
-
-	//Init layers
-	layer1: Layer
-	layer1.weights = create_matrix(H_LAYER_NEURONS,4)
+	layers := init_network()
 	defer {
-		clean_matrix(layer1.weights)
-	}
-	for r in 0..<len(layer1.weights) {
-		for c in 0..<len(layer1.weights[r]) {
-			layer1.weights[r][c] = rand.float64_range(0.,5.)
+		for &layer in layers {
+			clean_matrix(layer.weights)
 		}
 	}
-	/* fmt.println(layer1.weights) */
-
-	output_layer: Layer
-	output_layer.weights = create_matrix(len(Classification), H_LAYER_NEURONS)
-	defer {
-		clean_matrix(output_layer.weights)
-	}
-	for r in 0..<len(output_layer.weights ) {
-		for c in 0..<len(output_layer.weights[r]) {
-			output_layer.weights[r][c] = rand.float64_range(0.,5.)
-		}
-	}
-
-	layers: [NUM_LAYERS]Layer
-	layers[0] = layer1
-	layers[1] = output_layer
-
 	
 	//Calculate layers
 
@@ -118,7 +129,7 @@ run :: proc() {
 			expected_o := expected_vector[index]
 			loss, accuracy := back_prop(expected_o, o[:], chosen_output, layers, layer1_neurons)
 			fmt.println(o)
-			if index == ITERATIONS -1  { 
+			if index == constants.ITERATIONS -1  { 
 				/* fmt.println("\t======ITERATION: ", index)
 				fmt.println("STATS!!!")
 				fmt.println("CHOSEN: ",cast(Classification) chosen_output)
@@ -131,7 +142,7 @@ run :: proc() {
 	time.stopwatch_stop(&timer)
 	fmt.println(timer._accumulation)
 	
-	running := true
+	/* running := true
 	input_buff: [1024]byte
 	data: [4]f64
 	for running {
@@ -154,25 +165,36 @@ run :: proc() {
 		o, a, b := foward_prop(data[:], layers)
 		fmt.println(Classification(o))
 		//TODO: Add some runtime training this means we need to figure out the expted value for a given state
-	}
+	} */
 }
 
-foward_prop :: proc(input: []f64, layers: [NUM_LAYERS]Layer) -> (int, [4]f64, []f64) {
-	layer1_neurons := dot(input, layers[0].weights)
-	defer delete(layer1_neurons)
+forward_hidden_layer :: proc(input: []f64, hidden_layer: Layer) -> []f64  {
+	layer1_neurons := dot(input, hidden_layer.weights)
+	/* defer delete(layer1_neurons) */
 	for &n in layer1_neurons {
 		/* n += bias */
 		n = relu(n)
 	}
-	layer1_neurons = normalize_vector(layer1_neurons[:])
+	/* layer1_neurons = normalize_vector(layer1_neurons[:]) */
+	return layer1_neurons
+}
 
-	output_layer := dot(layer1_neurons, layers[1].weights)
-	defer delete(output_layer)
+forward_output :: proc(prev_layer_neurons: []f64, output_layer: Layer) -> [len(Classification)]f64 {
+	output_layer := dot(prev_layer_neurons, output_layer.weights)
+	/* defer delete(output_layer) */
 	for &n in output_layer {
 		/* n += bias */
 	}
-	output_layer = normalize_vector(output_layer[:])
+	/* output_layer = normalize_vector(output_layer[:]) */
 	o := soft_max(output_layer[:])
+	return o
+}
+
+foward_prop :: proc(input: []f64, layers: [constants.NUM_LAYERS + 1]Layer) -> (int, [4]f64, []f64) {
+
+	layer1_neurons := forward_hidden_layer(input, layers[0])
+	defer delete(layer1_neurons)
+	o := forward_output(layer1_neurons, layers[1])
 
 	//Make decision
 	sum:f64 = 0.
@@ -189,7 +211,7 @@ foward_prop :: proc(input: []f64, layers: [NUM_LAYERS]Layer) -> (int, [4]f64, []
 	return chosen_output, o, layer1_neurons
 }
 
-back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [NUM_LAYERS]Layer, layer1_neurons: []f64) -> (loss: f64, accuracy: f64){
+back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [constants.NUM_LAYERS + 1]Layer, layer1_neurons: []f64) -> (loss: f64, accuracy: f64){
 	//Calc loss
 
 	loss = cross_entropy_loss(o[chosen_output])
@@ -200,7 +222,7 @@ back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [NUM_LA
 	alpha := 0.1
 	//UPDATE OUTPUT LAYER////////
 	for &row, r in layers[1].weights[chosen_output] {
-		new_weight := row - alpha * ( loss)
+		new_weight := row - alpha * (loss)
 		row = new_weight
 	}
 
@@ -242,6 +264,14 @@ weighted_sum :: proc(input, weights: []f64, bias: f64) -> f64 {
 	return sum + bias
 }
 
+sigmoid :: proc(x: f64) -> f64 {
+	return 1/(1 + math.exp(-x))
+}
+
+d_sigmoid :: proc(x: f64) -> f64 {
+	return sigmoid(x) * (1 - sigmoid(x))
+}
+
 relu :: proc(z: f64) -> f64 {
 	return max(0., z)
 }
@@ -278,6 +308,7 @@ cross_entropy_loss :: proc(predicted_val: f64) -> f64 {
 
 dot :: proc(v: []f64, m:Matrix) -> []f64 {
 	assert(len(v) == len(m[0]))
+	//TODO: Leaking memory here
 	output := make_slice([]f64, len(m))
 	
 	for r in 0..<len(m) {
@@ -309,7 +340,7 @@ normalize_vector :: proc(vector: []f64) -> []f64 {
 	for &val in vector {
 		numerator := val - min
 		range := 1. - -1.
-		val = (numerator/denom) * range + 1
+		val = (numerator/denom) * range - 1.
 	}
 	return vector
 }
@@ -336,7 +367,7 @@ transpose :: proc(input_matrix: Matrix) -> Matrix {
 	return input_matrix_t
 }
 
-find_min :: proc(vector: []f64) -> (int, f64) {
+find_min :: proc(vector: []$T) -> (int, T) {
 	curr_i := -1
 	curr_min := 99999999.
 	for n, i in vector {

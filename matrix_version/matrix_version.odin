@@ -1,6 +1,5 @@
 package matrix_version
 
-import "core:terminal"
 import "core:fmt" 
 import "core:simd"
 import "core:math/rand"
@@ -28,16 +27,6 @@ Input_Layer :: struct {
 
 }
 
-
-Hidden_Layer :: struct {
-	w1: matrix[4,4]f64,
-	/* w2: matrix[4, 4]f64,
-	w3: matrix[4, 4]f64,
-	w4: matrix[4, 4]f64, */
-	weighted_sums: simd_4,
-	neurons: simd_4,
-}
-
 H_Layer :: struct {
 	weights: matrix[4,4]f64,
 	biases: matrix[1,4]f64,
@@ -52,14 +41,10 @@ O_Layer_Classification :: struct {
 	neurons: matrix[1,4]f64,
 }
 
-Output_Layer :: struct {
-	w1: [4]simd_4,
-	neurons: simd_4,
-}
-
-ITERATIONS :: 2
+ITERATIONS :: 10
 MAX_INPUT_VALUE :: 100.
-MAX_WEIGHT_VALUE :: 2.
+MAX_WEIGHT_VALUE :: 1.
+MIN_WEIGHT_VALUE :: -1.
 NUM_LAYERS :: 1
 ALPHA :: 0.1
 
@@ -104,24 +89,26 @@ run :: proc() {
 
 	h_layer1: H_Layer
 	h_layer1.weights = random_matrix4x4()
-	h_layer1.biases = random_matrix1x4()
+	fmt.println("H_LAYER1: ", h_layer1, "\n")
+	/* h_layer1.biases = random_matrix1x4() */
 	o_layer: O_Layer_Classification
 	o_layer.weights = random_matrix4x4()
-	o_layer.biases = random_matrix1x4()
+	fmt.println("O_LAYER: ", o_layer, "\n")
+	/* o_layer.biases = random_matrix1x4() */
 
 	timer: time.Stopwatch
 	time.stopwatch_start(&timer)
 	ret:[len(Classification)]f64
 	for input, index in input_matrix {
-		fmt.println("ITERATION: ", index)
+		/* fmt.println("ITERATION: ", index) */
 
 		ret = forward_prop(input, &h_layer1, &o_layer)
-		fmt.println("RET: ", ret)
-		fmt.println("EXPECTED_VECTOR: ", expected_vector[index])
+		fmt.println(ret)
+		/* i, max := find_max(ret)
+		fmt.println("RET: ", Classification(i)) */
 		
 		//TODO: Back prop
-		
-		back_prop(input, ret, &h_layer1, &o_layer, expected_vector, index)
+		/* back_prop(input, ret, &h_layer1, &o_layer, expected_vector, index) */
 		//Cross entropy loss
 
 		fmt.println()
@@ -158,20 +145,31 @@ run :: proc() {
 	}  */
 }
 
+foward_hidden_layer :: proc(input: simd_4, h_layer: ^H_Layer) {
+	v := transmute(matrix[1,4]f64)normalize_vector(input)
+
+	h_layer.weighted_sums = v * h_layer.weights
+	/* h_layer.weighted_sums = h_layer.weighted_sums + h_layer.biases */
+	h_layer.weighted_sums = transmute(matrix[1,4]f64)normalize_vector(transmute(simd_4)h_layer.weighted_sums)
+	h_layer.neurons = transmute(matrix[1,4]f64)relu(transmute(simd_4)h_layer.weighted_sums)
+	h_layer.neurons = transmute(matrix[1,4]f64)normalize_vector(transmute(simd_4)h_layer.neurons)
+}
+
+forward_output :: proc(prev_layer: H_Layer, out_layer: ^O_Layer_Classification) {
+
+	out_layer.weighted_sums = prev_layer.neurons * out_layer.weights
+	/* out_layer.weighted_sums = h_layer1.weighted_sums + out_layer.biases */
+	out_layer.weighted_sums = transmute(matrix[1,4]f64)normalize_vector(transmute(simd_4)out_layer.weighted_sums)
+	out_layer.neurons = transmute(matrix[1,4]f64)soft_max(transmute([len(Classification)]f64)out_layer.weighted_sums)
+	/* o_layer.neurons = transmute(matrix[1,4]f64)normalize_vector(transmute(simd_4)o_layer.neurons) */
+}
+
 forward_prop :: proc(input: simd_4, h_layer1:^H_Layer, o_layer: ^O_Layer_Classification) -> [len(Classification)]f64 {
 	_input := input
 	_input = normalize_vector(_input)
-	v := transmute(matrix[1,4]f64)_input
 
-	h_layer1.weighted_sums = v * h_layer1.weights
-	h_layer1.weighted_sums = h_layer1.weighted_sums + h_layer1.biases
-	h_layer1.neurons = transmute(matrix[1,4]f64)relu(transmute(simd_4)h_layer1.weighted_sums)
-	fmt.println("H_LAYER1: ", h_layer1)
-
-	o_layer.weighted_sums = h_layer1.neurons * o_layer.weights
-	o_layer.weighted_sums = h_layer1.weighted_sums + o_layer.biases
-	o_layer.weighted_sums = transmute(matrix[1,4]f64)normalize_vector(transmute(simd_4)o_layer.weighted_sums)
-	o_layer.neurons = transmute(matrix[1,4]f64)soft_max(transmute([len(Classification)]f64)o_layer.weighted_sums)
+	foward_hidden_layer(input, h_layer1)
+	forward_output(h_layer1^, o_layer)
 
 	//Soft max
 	ret := transmute([len(Classification)]f64)o_layer.neurons
@@ -182,26 +180,28 @@ back_prop :: proc(input: simd_4, ret: [len(Classification)]f64, h_layer1: ^H_Lay
 	/* temp_out_loss_v := simd.mul(out_loss_v, hidden_layers[0].neurons) */
 	one_hot := [len(Classification)]f64{}
 	//NOTE: Might still be able to use log(ret[int(expected_vector[index](]) instead of just 1 and everything else is 0
-	one_hot[int(expected_vector[index])] = 1.
+	one_hot[int(expected_vector[index])] = -math.log10(ret[int(expected_vector[index])])
 	dz2:matrix[1,4]f64 = transmute(matrix[1,4]f64)(ret - one_hot)
 
 	//CHANGE IN OUTPUT LAYER
 	temp_dz2 := transmute(f64)(dz2 * linalg.transpose(h_layer1.neurons))
-	dw2 := 1/(ITERATIONS * temp_dz2)
-	db2 := 1/(ITERATIONS * simd.reduce_add_bisect(transmute(simd_4)dz2))
+	dw2 := 1/f64(ITERATIONS) * temp_dz2
+	/* db2 := 1/(ITERATIONS * simd.reduce_add_bisect(transmute(simd_4)dz2)) */
 
 	
 	//CHANGE IN HIDDEN LAYER
-	dz1 := linalg.matrix_comp_mul(linalg.transpose(o_layer.weights) * linalg.transpose(dz2), linalg.transpose(h_layer1.weighted_sums))
+	d_relu_vec:simd_4 = d_relu(transmute(simd_4)h_layer1.weighted_sums)
+	dz1 := linalg.matrix_comp_mul(linalg.transpose(o_layer.weights) * linalg.transpose(dz2), transmute(matrix[4,1]f64)d_relu_vec)
 	_input := transmute(matrix[1,4]f64)input
-	dw1 := 1/transmute(f64)(ITERATIONS * (linalg.transpose(dz1) * linalg.transpose(_input)))
-	db1 := 1/(ITERATIONS * simd.reduce_add_bisect(transmute(simd_4)dz1))
+	thing := linalg.transpose(dz1) * linalg.transpose(_input)
+	dw1 := 1/f64(ITERATIONS) * transmute(f64)(linalg.transpose(dz1) * linalg.transpose(_input))
+	/* db1 := 1/(ITERATIONS * simd.reduce_add_bisect(transmute(simd_4)dz1)) */
 
 	h_layer1.weights = h_layer1.weights - generate_matrix4x4(ALPHA * dw1)
-	h_layer1.biases = h_layer1.biases - generate_matrix1x4(ALPHA * db1)
+	/* h_layer1.biases = h_layer1.biases - generate_matrix1x4(ALPHA * db1) */
 	
 	o_layer.weights = o_layer.weights - generate_matrix4x4(ALPHA * dw2)
-	o_layer.biases = o_layer.biases - generate_matrix1x4(ALPHA * db2)
+	/* o_layer.biases = o_layer.biases - generate_matrix1x4(ALPHA * db2) */
 }
 
 soft_max :: proc(neurons: [len(Classification)]f64) -> [len(Classification)]f64 {
@@ -255,10 +255,10 @@ find_max :: proc(vector: [4]f64) -> (int, f64) {
 
 random_matrix4x4 :: proc() -> matrix[4,4]f64 {
 	return {
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
+	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),
+	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),
+	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),
+	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),
 	}
 }
 
@@ -280,13 +280,13 @@ generate_matrix1x4 :: proc(val: f64) -> matrix[1,4]f64 {
 
 random_matrix4x1 :: proc() -> matrix[4,1]f64 {
 	return {
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
+	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),
 	}
 }
 
 random_matrix1x4 :: proc() -> matrix[1,4]f64 {
 	return {
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
+	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),	rand.float64_range(MIN_WEIGHT_VALUE,MAX_WEIGHT_VALUE),
 	}
 }
 
@@ -308,7 +308,28 @@ normalize_vector :: proc(v: $T) -> T {
 	for &val in vector {
 		numerator := val - min
 		range := 1. - -1.
-		val = (numerator/denom) * range + 1
+		val = (numerator/denom) * range - 1
 	}
 	return simd.from_array(vector)
 }
+
+/*
+TEST INPUTS
+INPUT_MATRIX:  [[40.280407544550926, 26.978681299830352, 94.89336279946937, 41.330696086138097]]
+
+EXPECTED_VECTOR:  [1]
+
+LAYER1:  Layer{weights = [[2.9786259555492247, 1.8490057036625396, 2.54573101301464, 2.008264812816276], [4.603908068634691, 3.8170316246917197, 3.6184763617625215, 3.248871346980866], [4.8353490128955858, 1.140294029915752, 4.5653781245126126, 4.5062585871972356], [1.0528989834503533, 1.5893436276420325, 1.2401304977282601, 4.8967093126096666]]}
+
+OUTPUT_LAYER:  Layer{weights = [[2.236615639505719, 3.3104835621730437, 3.1796061350846254, 1.0705070004598154], [3.0881945081994795, 2.8629947570767493, 1.5491868130513775, 0.40377340971426423], [2.7150350823951297, 1.7340252892460029, 2.4675006487994238, 0.37353848144743407], [2.1309494355081893, 4.946177092888888, 2.386578267238466, 4.7480799156892326]]}
+*/
+
+/*
+INPUT_MATRIX:  [<40.280407544550926, 26.978681299830352, 94.89336279946937, 41.330696086138097>]
+
+EXPECTED_VECTOR:  [1]
+
+H_LAYER1:  H_Layer{weights = matrix[2.9786259555492247, 1.8490057036625396, 2.54573101301464, 2.008264812816276; 4.603908068634691, 3.8170316246917197, 3.6184763617625215, 3.248871346980866; 4.8353490128955858, 1.140294029915752, 4.5653781245126126, 4.5062585871972356; 1.0528989834503533, 1.5893436276420325, 1.2401304977282601, 4.8967093126096666], biases = matrix[0, 0, 0, 0], weighted_sums = matrix[0, 0, 0, 0], neurons = matrix[0, 0, 0, 0]}
+
+O_LAYER:  O_Layer_Classification{weights = matrix[2.236615639505719, 3.3104835621730437, 3.1796061350846254, 1.0705070004598154; 3.0881945081994795, 2.8629947570767493, 1.5491868130513775, 0.40377340971426423; 2.7150350823951297, 1.7340252892460029, 2.4675006487994238, 0.37353848144743407; 2.1309494355081893, 4.946177092888888, 2.386578267238466, 4.7480799156892326], biases = matrix[0, 0, 0, 0], weighted_sums = matrix[0, 0, 0, 0], neurons = matrix[0, 0, 0, 0]}
+*/
