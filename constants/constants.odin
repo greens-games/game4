@@ -2,5 +2,6 @@ package constants
 
 H_NUM_NEURONS :: 4
 O_NUM_NEURONS :: 4
-ITERATIONS :: 1000
+ITERATIONS :: 100
 NUM_LAYERS :: 1
+ALPHA :: 0.1

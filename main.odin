@@ -20,7 +20,7 @@ Version :: enum {
 
 main :: proc() {
 	rand.reset(1)
-	gui: bool = true
+	gui: bool = false
 	if !gui {
 		version:Version = .SLOW
 		switch version {
@@ -73,13 +73,13 @@ main :: proc() {
 		for !rl.WindowShouldClose() {
 			if rl.IsKeyPressed(.SPACE) {
 				if idx < constants.ITERATIONS {
+					input_layer = graph.convert_to_nodes(input_matrix[idx], .NONE)
 					input = slow_works.normalize_vector(input_matrix[idx])
-					idx += 1
 					layer1_neurons = slow_works.forward_hidden_layer(input, layers[0])
 					output_neurons = slow_works.forward_output(layer1_neurons, layers[1])
-					input_layer = graph.convert_to_nodes(input, .NONE)
 					hidden_nodes = graph.convert_to_nodes(layer1_neurons[:], .RELU)
 					output_nodes = graph.convert_to_nodes(output_neurons[:], .SOFT_MAX)
+					idx += 1
 				} else {
 					fmt.println("AT MAX ITERATIONS")
 				}

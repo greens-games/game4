@@ -127,8 +127,10 @@ run :: proc() {
 		/* fmt.println("O: ", o) */
 		if chosen_output > -1 {
 			expected_o := expected_vector[index]
-			loss, accuracy := back_prop(expected_o, o[:], chosen_output, layers, layer1_neurons)
+			loss, new_output_layer, new_hidden_layer := back_prop(expected_o, o[:], chosen_output, layers, layer1_neurons)
 			fmt.println(o)
+			layers[0] = new_output_layer
+			layers[1] = new_hidden_layer
 			if index == constants.ITERATIONS -1  { 
 				/* fmt.println("\t======ITERATION: ", index)
 				fmt.println("STATS!!!")
@@ -211,25 +213,63 @@ foward_prop :: proc(input: []f64, layers: [constants.NUM_LAYERS + 1]Layer) -> (i
 	return chosen_output, o, layer1_neurons
 }
 
-back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [constants.NUM_LAYERS + 1]Layer, layer1_neurons: []f64) -> (loss: f64, accuracy: f64){
-	//Calc loss
-
-	loss = cross_entropy_loss(o[chosen_output])
-	accuracy = 1 - math.abs(cross_entropy_loss(o[chosen_output]))
-
-	//Back Prop
-
-	alpha := 0.1
-	//UPDATE OUTPUT LAYER////////
-	for &row, r in layers[1].weights[chosen_output] {
-		new_weight := row - alpha * (loss)
+output_layer_train :: proc(loss: f64, chosen_output:int, output_layer: Layer) -> Layer {
+	_output_layer := output_layer
+	for &row, r in _output_layer.weights[chosen_output] {
+		new_weight := row - constants.ALPHA * (loss)
 		row = new_weight
 	}
 
-	//UPDATE LAYER 1 //////////
-	layer1_neuron_loss := make_slice([]f64, len(layer1_neurons))
+	return _output_layer
+}
+
+hidden_layer_train :: proc(loss:f64, layer_neurons: []f64, hidden_layer: Layer) -> Matrix {
+	layer1_neuron_loss := make_slice([]f64, len(layer_neurons))
 	defer delete(layer1_neuron_loss)
-	weights_to_update_t := transpose(layers[0].weights) 
+	weights_to_update_t := transpose(hidden_layer.weights) 
+	defer {
+		clean_matrix(weights_to_update_t)
+	}
+	for row, r in weights_to_update_t {
+		for col, c in weights_to_update_t[r] {
+			weight := weights_to_update_t[r][c]
+			d_a := d_relu(layer_neurons[c])
+			neuron_loss := weight * loss * d_a
+			layer1_neuron_loss[c] = neuron_loss
+		}
+	}
+
+	for row, r in weights_to_update_t {
+		for &col, c in weights_to_update_t[r] {
+			new_weight := col - constants.ALPHA * (layer1_neuron_loss[r] * loss)
+			col = new_weight
+		}
+	}
+	new_weights_to_update := transpose(weights_to_update_t)
+
+	return new_weights_to_update
+}
+
+back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [constants.NUM_LAYERS + 1]Layer, layer1_neurons: []f64) -> (loss: f64, new_output_layer: Layer, new_hidden_layer: Layer) {
+	//Calc loss
+
+	loss = cross_entropy_loss(o[chosen_output])
+
+	//Back Prop
+
+	//UPDATE OUTPUT LAYER////////
+	new_output_layer = output_layer_train(loss, chosen_output, layers[0])
+	/* for &row, r in layers[0].weights[chosen_output] {
+		new_weight := row - constants.ALPHA * (loss)
+		row = new_weight
+	} */
+
+	//UPDATE LAYER 1 //////////
+	new_hidden_layer = layers[1]
+	new_hidden_layer.weights = hidden_layer_train(loss, layer1_neurons, layers[1])
+	/* layer1_neuron_loss := make_slice([]f64, len(layer1_neurons))
+	defer delete(layer1_neuron_loss)
+	weights_to_update_t := transpose(layers[1].weights) 
 	defer {
 		clean_matrix(weights_to_update_t)
 	}
@@ -244,14 +284,15 @@ back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [consta
 
 	for row, r in weights_to_update_t {
 		for &col, c in weights_to_update_t[r] {
-			new_weight := col - alpha * (layer1_neuron_loss[r] * loss)
+			new_weight := col - constants.ALPHA * (layer1_neuron_loss[r] * loss)
 			col = new_weight
 		}
 	}
 	new_weights_to_update := transpose(weights_to_update_t)
 	defer {
 		clean_matrix(new_weights_to_update)
-	}
+	} */
+
 	return
 }
 
