@@ -2,7 +2,6 @@ package main
 
 import "core:text/regex"
 import "slow_works"
-import "simd_version"
 import "matrix_version"
 import "graph"
 import "constants"
@@ -25,7 +24,7 @@ main :: proc() {
 		version:Version = .SLOW
 		switch version {
 		case .SIMD:
-			simd_version.run()
+			/* simd_version.run() */
 		case .SLOW:
 			slow_works.run()
 		case .MATRIX:

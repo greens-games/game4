@@ -33,6 +33,10 @@ Layer :: struct {
 
 Matrix :: distinct [][]f64
 
+classification_counts := [4]int{}
+expected_counts := [4]int{}
+accuracy_count := 0
+
 //MODEL PARAMS
 
 generate_input :: proc() -> (Matrix, []int) {
@@ -129,8 +133,13 @@ run :: proc() {
 			expected_o := expected_vector[index]
 			loss, new_output_layer, new_hidden_layer := back_prop(expected_o, o[:], chosen_output, layers, layer1_neurons)
 			fmt.println(o)
-			layers[0] = new_output_layer
-			layers[1] = new_hidden_layer
+			classification_counts[chosen_output] += 1
+			expected_counts[expected_o] += 1
+			if expected_o == chosen_output {
+				accuracy_count += 1
+			}
+			layers[1] = new_output_layer
+			layers[0] = new_hidden_layer
 			if index == constants.ITERATIONS -1  { 
 				/* fmt.println("\t======ITERATION: ", index)
 				fmt.println("STATS!!!")
@@ -143,6 +152,12 @@ run :: proc() {
 	}
 	time.stopwatch_stop(&timer)
 	fmt.println(timer._accumulation)
+	fmt.printfln("CLASSIFICATION COUNTS: %v", classification_counts)
+	fmt.printfln("EXPECTED COUNTS: %v", expected_counts)
+	accuracy := (f32(accuracy_count)/f32(constants.ITERATIONS)) * 100
+	fmt.println("ACCURACY: ",accuracy)
+
+
 	
 	/* running := true
 	input_buff: [1024]byte
@@ -182,13 +197,14 @@ forward_hidden_layer :: proc(input: []f64, hidden_layer: Layer) -> []f64  {
 }
 
 forward_output :: proc(prev_layer_neurons: []f64, output_layer: Layer) -> [len(Classification)]f64 {
-	output_layer := dot(prev_layer_neurons, output_layer.weights)
+	neurons := dot(prev_layer_neurons, output_layer.weights)
 	/* defer delete(output_layer) */
-	for &n in output_layer {
+	for &n in neurons {
 		/* n += bias */
 	}
+	neurons = normalize_vector(neurons)
 	/* output_layer = normalize_vector(output_layer[:]) */
-	o := soft_max(output_layer[:])
+	o := soft_max(neurons[:])
 	return o
 }
 
@@ -201,7 +217,7 @@ foward_prop :: proc(input: []f64, layers: [constants.NUM_LAYERS + 1]Layer) -> (i
 	//Make decision
 	sum:f64 = 0.
 	chosen_output := -1
-	curr_max := -1.
+	curr_max := -99999.
 	for v, i in o {
 		if v > curr_max {
 			curr_max = v
@@ -213,11 +229,21 @@ foward_prop :: proc(input: []f64, layers: [constants.NUM_LAYERS + 1]Layer) -> (i
 	return chosen_output, o, layer1_neurons
 }
 
-output_layer_train :: proc(loss: f64, chosen_output:int, output_layer: Layer) -> Layer {
+output_layer_train :: proc(loss: f64, output_neurons: []f64, chosen_output:int, output_layer: Layer) -> Layer {
 	_output_layer := output_layer
-	for &row, r in _output_layer.weights[chosen_output] {
-		new_weight := row - constants.ALPHA * (loss)
-		row = new_weight
+	one_hot_arr:[len(Classification)]f64
+	one_hot_arr[chosen_output] = 1.
+	total_loss := 0.
+	for i in 0..<len(Classification) {
+		mse := math.pow(output_neurons[i] - one_hot_arr[i], 2)
+		total_loss += mse
+	}
+	for &row, r in _output_layer.weights {
+		for &col, c in _output_layer.weights[r] {
+			new_weight := col - constants.ALPHA * (loss)
+			/* new_weight := col - constants.ALPHA * (output_neurons[c] - one_hot_arr[c]) */
+			col = new_weight
+		}
 	}
 
 	return _output_layer
@@ -233,8 +259,9 @@ hidden_layer_train :: proc(loss:f64, layer_neurons: []f64, hidden_layer: Layer) 
 	for row, r in weights_to_update_t {
 		for col, c in weights_to_update_t[r] {
 			weight := weights_to_update_t[r][c]
-			d_a := d_relu(layer_neurons[c])
-			neuron_loss := weight * loss * d_a
+			//TODO: I believe this is the incorrect value to d_relu since this value will ALSO be 1 since our layer_neuron which is activated by relu is always >= 0
+			d_activation := d_relu(layer_neurons[c])
+			neuron_loss := weight * loss * d_activation
 			layer1_neuron_loss[c] = neuron_loss
 		}
 	}
@@ -250,23 +277,25 @@ hidden_layer_train :: proc(loss:f64, layer_neurons: []f64, hidden_layer: Layer) 
 	return new_weights_to_update
 }
 
-back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [constants.NUM_LAYERS + 1]Layer, layer1_neurons: []f64) -> (loss: f64, new_output_layer: Layer, new_hidden_layer: Layer) {
+back_prop :: proc(expected_o: int, output_neurons: []f64, chosen_output: int, layers: [constants.NUM_LAYERS + 1]Layer, layer1_neurons: []f64) -> (loss: f64, new_output_layer: Layer, new_hidden_layer: Layer) {
 	//Calc loss
 
-	loss = cross_entropy_loss(o[chosen_output])
+	loss = cross_entropy_loss(output_neurons[chosen_output])
 
 	//Back Prop
 
 	//UPDATE OUTPUT LAYER////////
-	new_output_layer = output_layer_train(loss, chosen_output, layers[0])
+	new_output_layer = output_layer_train(loss, output_neurons, chosen_output, layers[1])
 	/* for &row, r in layers[0].weights[chosen_output] {
 		new_weight := row - constants.ALPHA * (loss)
 		row = new_weight
-	} */
+	}
+	new_output_layer = layers[0] */
+
 
 	//UPDATE LAYER 1 //////////
-	new_hidden_layer = layers[1]
-	new_hidden_layer.weights = hidden_layer_train(loss, layer1_neurons, layers[1])
+	new_hidden_layer = layers[0]
+	new_hidden_layer.weights = hidden_layer_train(loss, layer1_neurons, layers[0])
 	/* layer1_neuron_loss := make_slice([]f64, len(layer1_neurons))
 	defer delete(layer1_neuron_loss)
 	weights_to_update_t := transpose(layers[1].weights) 
@@ -289,6 +318,7 @@ back_prop :: proc(expected_o: int, o: []f64, chosen_output: int, layers: [consta
 		}
 	}
 	new_weights_to_update := transpose(weights_to_update_t)
+	new_hidden_layer.weights = new_weights_to_update
 	defer {
 		clean_matrix(new_weights_to_update)
 	} */

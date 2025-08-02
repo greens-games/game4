@@ -29,10 +29,7 @@ Input_Layer :: struct {
 
 
 Hidden_Layer :: struct {
-	w1: matrix[4,4]f64,
-	/* w2: matrix[4, 4]f64,
-	w3: matrix[4, 4]f64,
-	w4: matrix[4, 4]f64, */
+	weights: [4]simd_4,
 	weighted_sums: simd_4,
 	neurons: simd_4,
 }
@@ -91,7 +88,9 @@ run :: proc() {
 	/* hidden_layer1, out_layer := test_layers() */
 
 	hidden_layer1: Hidden_Layer
-	hidden_layer1.w1 = random_matrix4x4()
+	for &weight in hidden_layer1.weights {
+		weight = random_simd4()
+	}
 	fmt.println("HIDDEN_LAYER1: ", hidden_layer1, "\n")
 	/* hidden_layer1.w2 = random_matrix4x4()
 	hidden_layer1.w3 = random_matrix4x4()
@@ -188,7 +187,7 @@ back_prop :: proc(input: simd_4, ret: [len(Classification)]f64, hidden_layers: [
 	one_hot[int(expected_vector[index])] = 1.
 	out_loss_v:simd_4 = simd.from_array(ret - one_hot)
 	temp_out_loss_v := simd.mul(out_loss_v, hidden_layers[0].neurons)
-	d_out_layer_weights := 1/(ITERATIONS * (simd.reduce_add_bisect(temp_out_loss_v)))
+	d_out_layer_weights := 1/(ITERATIONS * (simd.reduce_add_ordered(temp_out_loss_v)))
 
 	temp_out_layer_w1 := transmute(matrix[4, 4]f64) out_layer.w1
 	temp_d_out_layer_weighted_sums :=  temp_out_layer_w1 * (transmute(matrix[4,1]f64)out_loss_v)
@@ -251,7 +250,7 @@ soft_max :: proc(neurons: [len(Classification)]f64) -> [len(Classification)]f64 
 }
 
 dot_simd :: proc(v1, v2: $T) -> f64 {
-	return simd.reduce_add_bisect(simd.mul(v1, v2))
+	return simd.reduce_add_ordered(simd.mul(v1, v2))
 }
 
 relu :: proc(v: $T) -> T {
@@ -301,22 +300,6 @@ find_max :: proc(vector: [4]f64) -> (int, f64) {
 	return curr_i, curr_max
 }
 
-random_matrix4x4 :: proc() -> matrix[4,4]f64 {
-	return {
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	}
-}
-
-
-random_matrix4x1 :: proc() -> matrix[4,1]f64 {
-	return {
-	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
-	}
-}
-
 random_simd16 :: proc() -> simd_16 {
 	return {
 	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),	rand.float64_range(0.,MAX_WEIGHT_VALUE),
@@ -345,28 +328,6 @@ generate_simd4 :: proc(val: f64) -> simd_4 {
 	return {
 	val, val, val, val,
 	}
-}
-
-normalize_simd16 :: proc(v: simd_16) -> simd_16 {
-	_v := v
-	_v = simd.sqrt(_v)
-	_v = simd.div(_v, 16)
-	return _v
-}
-
-normalize_simd4 :: proc(v: simd_4) -> simd_4 {
-	_v := v
-	_v = simd.sqrt(_v)
-	_v = simd.div(_v, 4)
-	return _v
-}
-
-//NOTE: This probably will need to change to match slow_version
-normalize_simd :: proc(v: $T) -> T {
-	_v := v
-	_v = simd.sqrt(_v)
-	_v = simd.div(_v, len(_v))
-	return _v
 }
 
 normalize_vector :: proc(v: $T) -> T {

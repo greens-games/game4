@@ -89,7 +89,6 @@ convert_to_nodes :: proc(neurons: []f64, a_function: Activation_Function) -> (no
 				node.activated = false
 			}
 		case .SOFT_MAX:
-			fmt.println("MAX: ", max, "\nVAL: ", node.value)
 			if node.value > max {
 				max = node.value
 				max_idx = idx
