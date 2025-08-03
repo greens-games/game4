@@ -203,21 +203,6 @@ output_layer_train :: proc(loss: f64, output_neurons: []f64, chosen_output:int, 
 //TODO: I think this is our biggest issue right now look at this again and figure out a better way to do it
 hidden_layer_train :: proc(loss:f64, hidden_layer: ^Layer) {
 
-	/* layer1_neuron_loss := make_slice([]f64, len(hidden_layer.activated_neurons))
-	defer delete(layer1_neuron_loss)
-	weights_to_update_t := transpose(hidden_layer.weights) 
-	defer {
-		clean_matrix(weights_to_update_t)
-	}
-
-	for row, r in weights_to_update_t {
-		for col, c in weights_to_update_t[r] {
-			weight := weights_to_update_t[r][c]
-			d_activation := d_relu(hidden_layer.weighted_sums[c])
-			neuron_loss := weight * loss * d_activation
-			layer1_neuron_loss[c] = neuron_loss
-		}
-	} */
 	for row, r in hidden_layer.weights {
 		for &col, c in hidden_layer.weights[r] {
 			d_activation := d_relu(hidden_layer.weighted_sums[r])
@@ -225,22 +210,11 @@ hidden_layer_train :: proc(loss:f64, hidden_layer: ^Layer) {
 			col = col - constants.ALPHA * (neuron_loss)
 		}
 	}
-	/* for row, r in weights_to_update_t {
-		for &col, c in weights_to_update_t[r] {
-			new_weight := col - constants.ALPHA * (layer1_neuron_loss[r] * loss)
-			col = new_weight
-		}
-	}
-	new_weights_to_update := transpose(weights_to_update_t)
-
-	return new_weights_to_update */
 }
 
 back_prop :: proc(expected_o, chosen_output: int, output_neurons: []f64, layers: ^[constants.NUM_LAYERS + 1]Layer) -> (loss: f64, new_output_layer: Layer) {
 	loss = cross_entropy_loss(output_neurons[chosen_output])
 	output_layer_train(loss, output_neurons, chosen_output, layers[1])
-	/* new_hidden_layer = layers[0] */
-	/* new_hidden_layer.weights = hidden_layer_train(loss, &layers[0]) */
 	hidden_layer_train(loss, &layers[0])
 	return
 }
