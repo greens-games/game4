@@ -62,7 +62,6 @@ main :: proc() {
 		rl.InitWindow(920,680,"Network")
 		
 		nodes: [4]graph.Node
-		layer1_neurons: []f64
 		output_neurons: [4]f64
 		input: []f64
 		input_layer: [4]graph.Node
@@ -74,9 +73,9 @@ main :: proc() {
 				if idx < constants.ITERATIONS {
 					input_layer = graph.convert_to_nodes(input_matrix[idx], .NONE)
 					input = slow_works.normalize_vector(input_matrix[idx])
-					layer1_neurons = slow_works.forward_hidden_layer(input, layers[0])
-					output_neurons = slow_works.forward_output(layer1_neurons, layers[1])
-					hidden_nodes = graph.convert_to_nodes(layer1_neurons[:], .RELU)
+					slow_works.forward_hidden_layer(input, &layers[0])
+					output_neurons = slow_works.forward_output(layers[1].activated_neurons[:], &layers[1])
+					hidden_nodes = graph.convert_to_nodes(layers[1].activated_neurons[:], .RELU)
 					output_nodes = graph.convert_to_nodes(output_neurons[:], .SOFT_MAX)
 					idx += 1
 				} else {
