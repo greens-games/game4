@@ -181,6 +181,7 @@ foward_prop :: proc(input: []f64, layers: ^[constants.NUM_LAYERS + 1]Layer) -> (
 	return chosen_output, o
 }
 
+//TODO: Fix this up to use a pointer to the layer
 output_layer_train :: proc(loss: f64, output_neurons: []f64, chosen_output:int, output_layer: Layer) -> Layer {
 	_output_layer := output_layer
 	one_hot_arr:[len(Classification)]f64
@@ -200,9 +201,7 @@ output_layer_train :: proc(loss: f64, output_neurons: []f64, chosen_output:int, 
 	return _output_layer
 }
 
-//TODO: I think this is our biggest issue right now look at this again and figure out a better way to do it
 hidden_layer_train :: proc(loss:f64, hidden_layer: ^Layer) {
-
 	for row, r in hidden_layer.weights {
 		for &col, c in hidden_layer.weights[r] {
 			d_activation := d_relu(hidden_layer.weighted_sums[r])
@@ -212,6 +211,7 @@ hidden_layer_train :: proc(loss:f64, hidden_layer: ^Layer) {
 	}
 }
 
+//TODO: Probably use an array of Layer pointers rather tahn a pointer to an array
 back_prop :: proc(expected_o, chosen_output: int, output_neurons: []f64, layers: ^[constants.NUM_LAYERS + 1]Layer) -> (loss: f64, new_output_layer: Layer) {
 	loss = cross_entropy_loss(output_neurons[chosen_output])
 	output_layer_train(loss, output_neurons, chosen_output, layers[1])
